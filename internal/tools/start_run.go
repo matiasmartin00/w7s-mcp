@@ -2,8 +2,6 @@ package tools
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -11,6 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/matiasmartin00/w7s-mcp/internal/domain"
 	"github.com/matiasmartin00/w7s-mcp/internal/loader"
 )
 
@@ -40,6 +39,11 @@ func startRunHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToo
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	input := domain.StartRunRequest{WorkflowID: workflowID, Task: task}
+	if err := input.Validate(); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
 	// clientName is read from the session in ctx — safe for concurrent clients,
 	// each request carries its own session with its own clientInfo.
 	cn := clientNameFromContext(ctx)
@@ -54,14 +58,14 @@ func startRunHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToo
 		stepIDs[i] = step.ID
 	}
 
-	runID := newRunID()
+	runID := domain.NewRunID()
 	slog.Info("start_run loaded workflow", "workflow", wf.Name, "steps", stepIDs, "task", task, "run_id", runID)
 
-	out := map[string]any{
-		"run_id":   runID,
-		"workflow": wf.Name,
-		"steps":    stepIDs,
-		"message":  fmt.Sprintf("Run started. Call get_next_step with run_id: %s", runID),
+	out := domain.StartRunResponse{
+		RunID:    runID,
+		Workflow: wf.Name,
+		Steps:    stepIDs,
+		Message:  fmt.Sprintf("Run started. Call get_next_step with run_id: %s", runID),
 	}
 	outBytes, _ := json.Marshal(out)
 	return mcp.NewToolResultText(string(outBytes)), nil
@@ -80,10 +84,4 @@ func clientNameFromContext(ctx context.Context) string {
 		return ""
 	}
 	return ci.GetClientInfo().Name
-}
-
-func newRunID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }
