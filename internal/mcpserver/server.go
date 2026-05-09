@@ -5,32 +5,30 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-)
 
-// startTime is captured at package init for uptime reporting.
-var startTime = time.Now()
+	"github.com/matiasmartin00/w7s-mcp/internal/tools"
+)
 
 // New builds and returns a fully configured MCP server.
 // All tool/resource/prompt registrations happen here; transport is not concerned.
 func New() *server.MCPServer {
-	hooks := buildHooks()
-
 	s := server.NewMCPServer(
 		"w7s-mcp",
 		"0.1.0",
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, true),
-		server.WithHooks(hooks),
+		server.WithHooks(buildHooks()),
 		server.WithRecovery(),
 	)
 
-	registerTools(s)
+	tools.RegisterHelloWorld(s)
+	tools.RegisterServerInfo(s)
+	tools.RegisterStartRun(s)
+
 	registerResources(s)
 	registerPrompts(s)
 
@@ -61,51 +59,6 @@ func buildHooks() *server.Hooks {
 	return hooks
 }
 
-// registerTools adds all MCP tools to s.
-func registerTools(s *server.MCPServer) {
-	// ── Tool: hello_world ────────────────────────────────────────────────────
-	helloTool := mcp.NewTool("hello_world",
-		mcp.WithDescription("Greet someone by name"),
-		mcp.WithString("name",
-			mcp.Required(),
-			mcp.Description("Name of the person to greet"),
-		),
-		mcp.WithString("language",
-			mcp.Description("Language for the greeting (en, es, fr). Defaults to en."),
-			mcp.Enum("en", "es", "fr"),
-		),
-	)
-
-	s.AddTool(helloTool, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		name, err := req.RequireString("name")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		lang := req.GetString("language", "en")
-
-		greetings := map[string]string{"en": "Hello", "es": "Hola", "fr": "Bonjour"}
-		greeting, ok := greetings[lang]
-		if !ok {
-			greeting = "Hello"
-		}
-
-		msg := fmt.Sprintf("%s, %s! 👋 — w7s-mcp is alive.", greeting, name)
-		slog.Info("hello_world called", "name", name, "lang", lang)
-		return mcp.NewToolResultText(msg), nil
-	})
-
-	// ── Tool: server_info ────────────────────────────────────────────────────
-	infoTool := mcp.NewTool("server_info",
-		mcp.WithDescription("Return runtime metadata about this MCP server"),
-	)
-
-	s.AddTool(infoTool, func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		info := fmt.Sprintf("name=w7s-mcp version=0.1.0 uptime=%s", time.Since(startTime).Round(time.Second))
-		slog.Info("server_info called", "info", info)
-		return mcp.NewToolResultText(info), nil
-	})
-}
-
 // registerResources adds all MCP resources to s.
 func registerResources(s *server.MCPServer) {
 	aboutResource := mcp.NewResource(
@@ -121,9 +74,9 @@ func registerResources(s *server.MCPServer) {
 			mcp.TextResourceContents{
 				URI:      "w7s://about",
 				MIMEType: "text/plain",
-				Text: `w7s-mcp — hello-world MCP server
+				Text: `w7s-mcp — workflow orchestrator MCP server
 Version  : 0.1.0
-Tools    : hello_world, server_info
+Tools    : hello_world, server_info, start_run
 Resources: w7s://about
 Prompts  : greet
 `,
@@ -153,10 +106,7 @@ func registerPrompts(s *server.MCPServer) {
 			[]mcp.PromptMessage{
 				mcp.NewPromptMessage(
 					mcp.RoleAssistant,
-					mcp.NewTextContent(fmt.Sprintf(
-						"You are a friendly assistant. Greet %s warmly and ask how you can help them today.",
-						name,
-					)),
+					mcp.NewTextContent("You are a friendly assistant. Greet "+name+" warmly and ask how you can help them today."),
 				),
 			},
 		), nil

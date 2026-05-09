@@ -1,0 +1,11 @@
+id: test-workflow
+name: Test Workflow
+version: "1.0.0"
+agents:
+  - id: worker
+    name: Worker
+steps:
+  - id: step1
+    agent: worker
+    input: "Do the thing. STATUS: done"
+    expects: "STATUS:\\s*done"

@@ -1,0 +1,7 @@
+id: bad-workflow
+name: Bad Workflow
+version: "1.0.0"
+agents:
+  - id: worker
+    name: Worker
+# missing required 'steps' field
