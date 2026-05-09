@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	mcpgoclient "github.com/mark3labs/mcp-go/client"
@@ -213,6 +214,116 @@ func TestNew_HelloWorldTool_Call(t *testing.T) {
 	}
 	if len(resp.Result.Content) == 0 {
 		t.Errorf("expected non-empty content in tool result; body=%s", w.Body.String())
+	}
+}
+
+// TestNew_StartRunTool_Listed verifies that start_run tool is present in tools/list.
+// RED: start_run is not yet registered — this test will fail until server.go is updated.
+func TestNew_StartRunTool_Listed(t *testing.T) {
+	s := mcpserver.New()
+	client, err := mcpgoclient.NewInProcessClient(s)
+	if err != nil {
+		t.Fatalf("create in-process client: %v", err)
+	}
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("start in-process client: %v", err)
+	}
+	defer client.Close()
+
+	if _, err := client.Initialize(context.Background(), mcp.InitializeRequest{}); err != nil {
+		t.Fatalf("initialize in-process client: %v", err)
+	}
+
+	result, err := client.ListTools(context.Background(), mcp.ListToolsRequest{})
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+
+	found := false
+	for _, tool := range result.Tools {
+		if tool.Name == "start_run" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		names := make([]string, 0, len(result.Tools))
+		for _, tool := range result.Tools {
+			names = append(names, tool.Name)
+		}
+		t.Errorf("start_run not found in tools list; tools=%v", names)
+	}
+}
+
+// TestNew_StartRunTool_Call_ValidWorkflow verifies start_run tool returns success for a valid workflow file.
+func TestNew_StartRunTool_Call_ValidWorkflow(t *testing.T) {
+	s := mcpserver.New()
+	client, err := mcpgoclient.NewInProcessClient(s)
+	if err != nil {
+		t.Fatalf("create in-process client: %v", err)
+	}
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("start in-process client: %v", err)
+	}
+	defer client.Close()
+
+	if _, err := client.Initialize(context.Background(), mcp.InitializeRequest{}); err != nil {
+		t.Fatalf("initialize in-process client: %v", err)
+	}
+
+	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "start_run",
+			Arguments: map[string]any{
+				"workflow_path": "../../internal/loader/testdata/valid.yaml",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call start_run: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success, got error result: %v", result.Content)
+	}
+	if len(result.Content) == 0 {
+		t.Errorf("expected non-empty content in tool result")
+	}
+	// Verify the response mentions the workflow name.
+	text := result.Content[0].(mcp.TextContent).Text
+	if !strings.Contains(text, "greet-user") {
+		t.Errorf("expected response to mention workflow name 'greet-user', got: %s", text)
+	}
+}
+
+// TestNew_StartRunTool_Call_InvalidPath verifies start_run returns an error result for missing file.
+func TestNew_StartRunTool_Call_InvalidPath(t *testing.T) {
+	s := mcpserver.New()
+	client, err := mcpgoclient.NewInProcessClient(s)
+	if err != nil {
+		t.Fatalf("create in-process client: %v", err)
+	}
+	if err := client.Start(context.Background()); err != nil {
+		t.Fatalf("start in-process client: %v", err)
+	}
+	defer client.Close()
+
+	if _, err := client.Initialize(context.Background(), mcp.InitializeRequest{}); err != nil {
+		t.Fatalf("initialize in-process client: %v", err)
+	}
+
+	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "start_run",
+			Arguments: map[string]any{
+				"workflow_path": "/nonexistent/path/workflow.yaml",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call start_run: %v", err)
+	}
+	if !result.IsError {
+		t.Errorf("expected error result for missing file, got success: %v", result.Content)
 	}
 }
 

@@ -1,0 +1,17 @@
+apiVersion: workflow.w7s.io/v1alpha1
+kind: Workflow
+metadata:
+  name: greet-user
+  description: A simple greeting workflow
+inputs:
+  - name: username
+    type: string
+    required: true
+steps:
+  - id: step-greet
+    tool: hello_world
+    arguments:
+      name: "{{ inputs.username }}"
+outputs:
+  - name: message
+    from: step-greet.result

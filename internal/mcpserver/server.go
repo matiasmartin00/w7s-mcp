@@ -11,6 +11,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/matiasmartin00/w7s-mcp/internal/loader"
 )
 
 // startTime is captured at package init for uptime reporting.
@@ -103,6 +105,28 @@ func registerTools(s *server.MCPServer) {
 		info := fmt.Sprintf("name=w7s-mcp version=0.1.0 uptime=%s", time.Since(startTime).Round(time.Second))
 		slog.Info("server_info called", "info", info)
 		return mcp.NewToolResultText(info), nil
+	})
+	// ── Tool: start_run ──────────────────────────────────────────────────────
+	startRunTool := mcp.NewTool("start_run",
+		mcp.WithDescription("Load and validate a workflow file, then start a run"),
+		mcp.WithString("workflow_path",
+			mcp.Required(),
+			mcp.Description("Path to the YAML workflow file"),
+		),
+	)
+
+	s.AddTool(startRunTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		path, err := req.RequireString("workflow_path")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		wf, err := loader.Load(path)
+		if err != nil {
+			slog.Error("start_run failed to load workflow", "path", path, "error", err)
+			return mcp.NewToolResultError(fmt.Sprintf("failed to load workflow: %s", err)), nil
+		}
+		slog.Info("start_run loaded workflow", "name", wf.Metadata.Name, "steps", len(wf.Steps))
+		return mcp.NewToolResultText(fmt.Sprintf("Workflow '%s' loaded successfully with %d steps", wf.Metadata.Name, len(wf.Steps))), nil
 	})
 }
 

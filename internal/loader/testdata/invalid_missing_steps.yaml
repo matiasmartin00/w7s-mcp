@@ -1,0 +1,5 @@
+apiVersion: workflow.w7s.io/v1alpha1
+kind: Workflow
+metadata:
+  name: broken-workflow
+# steps field is intentionally missing to trigger validation error

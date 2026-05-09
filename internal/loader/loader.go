@@ -1,0 +1,87 @@
+// Package loader provides functions to load and validate workflow YAML files.
+package loader
+
+import (
+	_ "embed"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
+	"gopkg.in/yaml.v3"
+
+	"github.com/matiasmartin00/w7s-mcp/internal/workflow"
+)
+
+//go:embed workflow.schema.json
+var schemaBytes []byte
+
+// Load reads a YAML workflow file from path, validates it against the JSON Schema,
+// and returns a typed *workflow.Workflow. It wraps any underlying error with context.
+func Load(path string) (*workflow.Workflow, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading workflow file: %w", err)
+	}
+	return LoadBytes(data)
+}
+
+// LoadBytes parses and validates a YAML workflow from an in-memory byte slice.
+// The pipeline is: YAML → map[string]any → JSON → schema validation → typed struct.
+func LoadBytes(data []byte) (*workflow.Workflow, error) {
+	// 1. Parse YAML into a generic map to enable JSON schema validation.
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+
+	// 2. Convert to JSON.
+	jsonData, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("converting to JSON: %w", err)
+	}
+
+	// 3. Validate the JSON document against the embedded schema.
+	if err := validateSchema(jsonData); err != nil {
+		return nil, err
+	}
+
+	// 4. Unmarshal YAML into the typed workflow struct.
+	var wf workflow.Workflow
+	if err := yaml.Unmarshal(data, &wf); err != nil {
+		return nil, fmt.Errorf("decoding workflow: %w", err)
+	}
+	return &wf, nil
+}
+
+// validateSchema compiles the embedded JSON Schema and validates jsonData against it.
+func validateSchema(jsonData []byte) error {
+	compiler := jsonschema.NewCompiler()
+
+	// UnmarshalJSON parses the schema bytes into the format expected by AddResource.
+	schemaDoc, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaBytes))
+	if err != nil {
+		return fmt.Errorf("parsing embedded schema: %w", err)
+	}
+
+	if err := compiler.AddResource("workflow.schema.json", schemaDoc); err != nil {
+		return fmt.Errorf("loading embedded schema: %w", err)
+	}
+
+	schema, err := compiler.Compile("workflow.schema.json")
+	if err != nil {
+		return fmt.Errorf("compiling schema: %w", err)
+	}
+
+	// UnmarshalJSON parses the document for schema validation.
+	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(jsonData))
+	if err != nil {
+		return fmt.Errorf("preparing document for validation: %w", err)
+	}
+
+	if err := schema.Validate(doc); err != nil {
+		return fmt.Errorf("workflow validation failed: %w", err)
+	}
+	return nil
+}
