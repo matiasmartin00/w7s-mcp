@@ -1,0 +1,21 @@
+title: w7s-mcp
+description: "Workflow Orchestrator MCP Server — deterministic multi-agent orchestration over MCP."
+baseurl: "/w7s-mcp"
+url: "https://matiasmartin00.github.io"
+
+theme: just-the-docs
+
+aux_links:
+  "GitHub":
+    - "https://github.com/matiasmartin00/w7s-mcp"
+
+aux_links_new_tab: true
+
+search_enabled: true
+
+color_scheme: dark
+
+footer_content: "MIT License. Copyright &copy; 2026 matiasmartin00."
+
+plugins:
+  - jekyll-seo-tag
