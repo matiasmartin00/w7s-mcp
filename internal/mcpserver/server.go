@@ -48,6 +48,7 @@ func New() *server.MCPServer {
 	tools.RegisterGetRunStatus(s, st)
 	tools.RegisterGetNextStep(s, st)
 	tools.RegisterCompleteStep(s, st)
+	tools.RegisterFailStep(s, st)
 
 	registerResources(s)
 	registerPrompts(s)
