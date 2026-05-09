@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -21,27 +20,6 @@ import (
 
 // startTime is captured at package init for uptime reporting.
 var startTime = time.Now()
-
-// clientName holds the MCP client name captured during initialization.
-// Protected by clientNameMu for concurrent access.
-var (
-	clientName   string
-	clientNameMu sync.RWMutex
-)
-
-// getClientName returns the stored client name (safe for concurrent reads).
-func getClientName() string {
-	clientNameMu.RLock()
-	defer clientNameMu.RUnlock()
-	return clientName
-}
-
-// setClientName stores the client name captured at initialize time.
-func setClientName(name string) {
-	clientNameMu.Lock()
-	defer clientNameMu.Unlock()
-	clientName = name
-}
 
 // New builds and returns a fully configured MCP server.
 // All tool/resource/prompt registrations happen here; transport is not concerned.
@@ -78,16 +56,29 @@ func buildHooks() *server.Hooks {
 		slog.Error("mcp request error", "method", method, "id", id, "error", err)
 	})
 	hooks.AddAfterInitialize(func(_ context.Context, _ any, msg *mcp.InitializeRequest, _ *mcp.InitializeResult) {
-		name := msg.Params.ClientInfo.Name
-		setClientName(name)
 		slog.Info("client initialized",
-			"client_name", name,
+			"client_name", msg.Params.ClientInfo.Name,
 			"client_version", msg.Params.ClientInfo.Version,
 			"protocol_version", msg.Params.ProtocolVersion,
 		)
 	})
 
 	return hooks
+}
+
+// clientNameFromContext extracts the MCP client name from the session stored in ctx.
+// Returns an empty string if the session does not implement SessionWithClientInfo,
+// which causes the loader to fall back to the default workflow directories.
+func clientNameFromContext(ctx context.Context) string {
+	session := server.ClientSessionFromContext(ctx)
+	if session == nil {
+		return ""
+	}
+	ci, ok := session.(server.SessionWithClientInfo)
+	if !ok {
+		return ""
+	}
+	return ci.GetClientInfo().Name
 }
 
 // registerTools adds all MCP tools to s.
@@ -147,7 +138,7 @@ func registerTools(s *server.MCPServer) {
 		),
 	)
 
-	s.AddTool(startRunTool, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	s.AddTool(startRunTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		workflowID, err := req.RequireString("workflow_id")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
@@ -157,7 +148,9 @@ func registerTools(s *server.MCPServer) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		cn := getClientName()
+		// clientName is read from the session in ctx — safe for concurrent clients,
+		// each request carries its own session with its own clientInfo.
+		cn := clientNameFromContext(ctx)
 		wf, err := loader.LoadByID(cn, workflowID)
 		if err != nil {
 			slog.Error("start_run failed to load workflow", "workflow_id", workflowID, "error", err)
@@ -198,9 +191,9 @@ func registerResources(s *server.MCPServer) {
 			mcp.TextResourceContents{
 				URI:      "w7s://about",
 				MIMEType: "text/plain",
-				Text: `w7s-mcp — hello-world MCP server
+				Text: `w7s-mcp — workflow orchestrator MCP server
 Version  : 0.1.0
-Tools    : hello_world, server_info
+Tools    : hello_world, server_info, start_run
 Resources: w7s://about
 Prompts  : greet
 `,
