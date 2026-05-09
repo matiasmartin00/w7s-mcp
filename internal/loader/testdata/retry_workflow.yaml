@@ -1,0 +1,21 @@
+id: retry-workflow
+name: Retry Workflow
+version: "1.0.0"
+agents:
+  - id: implementor
+    name: Implementor
+  - id: verifier
+    name: Verifier
+steps:
+  - id: implement
+    agent: implementor
+    input: "Task: {{task}}\n\nImplement it."
+  - id: verify
+    agent: verifier
+    input: "Verify: {{task}}\nFeedback: {{feedback}}"
+    on_fail:
+      retry_step: implement
+      feedback_var: feedback
+      max_retries: 3
+      on_exhausted:
+        escalate_to: human
