@@ -1,12 +1,26 @@
 # w7s-mcp
 
-A minimal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server written in Go, using [mcp-go](https://github.com/mark3labs/mcp-go) and the **Streamable HTTP** transport.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server written in Go that acts as a **deterministic workflow orchestrator** for AI agents.
+
+📚 **[Full documentation → matiasmartin00.github.io/w7s-mcp](https://matiasmartin00.github.io/w7s-mcp)**
+
+---
+
+## What it does
+
+AI assistants lack a persistent mechanism to orchestrate multi-agent workflows. `w7s-mcp` solves this by maintaining execution state in SQLite and exposing workflow control via MCP tools:
+
+- Define workflows in **YAML** with JSON Schema validation
+- Support **retries** and **escalation** as declared in the workflow
+- Operate as an **MCP HTTP server** (Streamable HTTP, JSON-RPC 2.0)
+
+---
 
 ## Quick Start
 
 ### Requirements
 
-- Go 1.22+
+- Go >= 1.22
 
 ### Run locally
 
@@ -14,50 +28,41 @@ A minimal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serve
 go run ./cmd/w7s-mcp
 ```
 
-The server listens on `http://localhost:4004/mcp` by default.
+Server starts at `http://localhost:4004/mcp`.
 
-### Change the port
+### Environment variables
 
-```bash
-PORT=8080 go run ./cmd/w7s-mcp
+| Variable     | Default          | Description                          |
+|--------------|------------------|--------------------------------------|
+| `W7S_DB_DIR` | `~/.config/w7s`  | Directory where `data.db` is created |
+| `PORT`       | `4004`           | HTTP port                            |
+
+### Register with an MCP client
+
+```json
+{
+  "mcp": {
+    "w7s": {
+      "type": "remote",
+      "url": "http://localhost:4004/mcp"
+    }
+  }
+}
 ```
 
-### Health check
+---
 
-```bash
-curl http://localhost:4004/healthz
-# ok
-```
+## MCP Tools
 
-## MCP Endpoint
+| Tool             | Description                                                  |
+|------------------|--------------------------------------------------------------|
+| `start_run`      | Start a new workflow execution                               |
+| `get_next_step`  | Get the next step to execute (interpolated prompt + agent)   |
+| `complete_step`  | Mark a step as done, extract variables from agent output     |
+| `fail_step`      | Mark a step as failed, trigger retry or escalation           |
+| `get_run_status` | Inspect full run state: steps, variables, status             |
 
-| Method | Path   | Description                          |
-|--------|--------|--------------------------------------|
-| POST   | `/mcp` | Streamable HTTP MCP transport        |
-
-### Test with curl
-
-```bash
-# initialize
-curl -s -X POST http://localhost:4004/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"curl","version":"0.0.1"}}}'
-
-# list tools (replace <SESSION_ID> with the Mcp-Session-Id from the initialize response header)
-curl -s -X POST http://localhost:4004/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "Mcp-Session-Id: <SESSION_ID>" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
-```
-
-## Tools
-
-| Tool          | Description                            |
-|---------------|----------------------------------------|
-| `hello_world` | Greet someone by name (en / es / fr)   |
-| `server_info` | Return runtime metadata of the server  |
+---
 
 ## Development
 
@@ -72,11 +77,17 @@ go build ./cmd/w7s-mcp
 go vet ./...
 ```
 
-## Architecture
+---
 
-```
-cmd/w7s-mcp/main.go             — HTTP bootstrap, graceful shutdown
-internal/mcpserver/server.go    — MCP server construction (transport-agnostic)
-```
+## Documentation
 
-Business logic lives in `internal/mcpserver`; the transport layer (`cmd/w7s-mcp/main.go`) only wires HTTP.
+- [Getting Started](https://matiasmartin00.github.io/w7s-mcp/getting-started)
+- [Architecture](https://matiasmartin00.github.io/w7s-mcp/architecture)
+- [Tool Reference](https://matiasmartin00.github.io/w7s-mcp/tool-reference)
+- [Workflow Authoring](https://matiasmartin00.github.io/w7s-mcp/workflow-authoring)
+
+---
+
+## License
+
+MIT
