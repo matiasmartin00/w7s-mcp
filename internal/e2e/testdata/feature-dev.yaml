@@ -1,0 +1,40 @@
+id: feature-dev
+name: Feature Development
+version: "1.0.0"
+agents:
+  - id: explorer
+    name: Explorer
+  - id: implementor
+    name: Implementor
+  - id: verifier
+    name: Verifier
+steps:
+  - id: explore
+    agent: explorer
+    input: "Task: {{task}}\n\nExplore the codebase."
+    expects: "STATUS:\\s*done"
+    extract:
+      scope: "SCOPE:\\s*(.+)"
+      files: "FILES:\\s*(.+)"
+  - id: implement
+    agent: implementor
+    input: "Task: {{task}}\nScope: {{scope}}\nFiles: {{files}}\n\nImplement."
+    expects: "STATUS:\\s*done"
+    extract:
+      changes: "CHANGES:\\s*(.+)"
+    on_fail:
+      retry_step: explore
+      feedback_var: implement_feedback
+      max_retries: 2
+      on_exhausted:
+        escalate_to: human
+  - id: verify
+    agent: verifier
+    input: "Task: {{task}}\nScope: {{scope}}\nChanges: {{changes}}\n\nVerify."
+    expects: "STATUS:\\s*done"
+    on_fail:
+      retry_step: implement
+      feedback_var: verify_feedback
+      max_retries: 3
+      on_exhausted:
+        escalate_to: human
