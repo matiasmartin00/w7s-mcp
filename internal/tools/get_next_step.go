@@ -123,6 +123,12 @@ func getNextStepHandler(ctx context.Context, req mcp.CallToolRequest, st *store.
 
 	prompt := parser.Interpolate(wfStep.Input, vars)
 
+	requiredOutputs, err := collectRequiredOutputs(ctx, st, runID, wf, wfStep)
+	if err != nil {
+		slog.Error("get_next_step failed to resolve required outputs", "run_id", runID, "step_id", nextStep.StepID, "error", err)
+		return mcp.NewToolResultError(fmt.Sprintf("failed to resolve required outputs: %s", err)), nil
+	}
+
 	expects := wfStep.Expects
 	if expects == "" {
 		expects = `STATUS:\s*done`
@@ -142,16 +148,56 @@ func getNextStepHandler(ctx context.Context, req mcp.CallToolRequest, st *store.
 	slog.Info("get_next_step dispatching step", "run_id", runID, "step_id", nextStep.StepID, "attempt", newAttempt)
 
 	out := domain.GetNextStepResponse{
-		Status:      "next_step",
-		StepID:      nextStep.StepID,
-		Agent:       agentInfo,
-		Prompt:      prompt,
-		Attempt:     newAttempt,
-		Expects:     expects,
-		Instruction: instruction,
+		Status:          "next_step",
+		StepID:          nextStep.StepID,
+		Agent:           agentInfo,
+		Prompt:          prompt,
+		Attempt:         newAttempt,
+		Expects:         expects,
+		RequiredOutputs: requiredOutputs,
+		Instruction:     instruction,
 	}
 	outBytes, _ := json.Marshal(out)
 	return mcp.NewToolResultText(string(outBytes)), nil
+}
+
+func collectRequiredOutputs(ctx context.Context, st *store.Store, runID string, wf *workflow.Workflow, wfStep *workflow.Step) (map[string]*string, error) {
+	if len(wfStep.RequiresOutput) == 0 {
+		return nil, nil
+	}
+
+	stepOrder := make(map[string]int, len(wf.Steps))
+	for i, step := range wf.Steps {
+		stepOrder[step.ID] = i
+	}
+
+	currentIdx, ok := stepOrder[wfStep.ID]
+	if !ok {
+		return nil, fmt.Errorf("step %q not found in workflow definition", wfStep.ID)
+	}
+
+	requiredOutputs := make(map[string]*string, len(wfStep.RequiresOutput))
+	for _, requiredStepID := range wfStep.RequiresOutput {
+		requiredIdx, exists := stepOrder[requiredStepID]
+		if !exists {
+			return nil, fmt.Errorf("required step %q (from step %q) not found in workflow definition", requiredStepID, wfStep.ID)
+		}
+		if requiredIdx >= currentIdx {
+			return nil, fmt.Errorf("required step %q must appear before step %q", requiredStepID, wfStep.ID)
+		}
+
+		requiredStep, err := st.GetStep(ctx, runID, requiredStepID)
+		if err != nil {
+			if err == domain.ErrNotFound {
+				return nil, fmt.Errorf("required step %q not found in run %q", requiredStepID, runID)
+			}
+			return nil, fmt.Errorf("get required step %q: %w", requiredStepID, err)
+		}
+
+		requiredOutputs[requiredStepID] = requiredStep.Output
+	}
+
+	return requiredOutputs, nil
 }
 
 // findStepAndAgent locates the workflow step definition and its agent by stepID.

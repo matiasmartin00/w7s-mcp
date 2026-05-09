@@ -56,14 +56,15 @@ type AgentInfo struct {
 // GetNextStepResponse is the typed output for the get_next_step MCP tool.
 // Status is one of: "next_step", "done", "escalated".
 type GetNextStepResponse struct {
-	Status      string     `json:"status"`
-	StepID      string     `json:"step_id,omitempty"`
-	Agent       *AgentInfo `json:"agent,omitempty"`
-	Prompt      string     `json:"prompt,omitempty"`
-	Attempt     int        `json:"attempt,omitempty"`
-	Expects     string     `json:"expects,omitempty"`
-	Instruction string     `json:"instruction,omitempty"`
-	Message     string     `json:"message,omitempty"`
+	Status          string             `json:"status"`
+	StepID          string             `json:"step_id,omitempty"`
+	Agent           *AgentInfo         `json:"agent,omitempty"`
+	Prompt          string             `json:"prompt,omitempty"`
+	Attempt         int                `json:"attempt,omitempty"`
+	Expects         string             `json:"expects,omitempty"`
+	RequiredOutputs map[string]*string `json:"required_outputs,omitempty"`
+	Instruction     string             `json:"instruction,omitempty"`
+	Message         string             `json:"message,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

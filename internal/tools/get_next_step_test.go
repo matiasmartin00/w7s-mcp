@@ -344,3 +344,163 @@ func TestGetNextStep_AgentFilesIncluded(t *testing.T) {
 		t.Errorf("expected AGENTS.md in agent files, got %v", resp.Agent.Files)
 	}
 }
+
+func TestGetNextStep_NoRequiresOutput(t *testing.T) {
+	client := startClient(t, newServerWithStore(t, registerBoth))
+	runID := startRunAndGetID(t, client, loaderTestdataPath("valid.yaml"), "my task")
+
+	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name:      "get_next_step",
+			Arguments: map[string]any{"run_id": runID},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %v", result.Content)
+	}
+
+	text := result.Content[0].(mcp.TextContent).Text
+	var resp domain.GetNextStepResponse
+	if err := json.Unmarshal([]byte(text), &resp); err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+
+	if resp.RequiredOutputs != nil {
+		t.Errorf("expected required_outputs to be nil, got %#v", resp.RequiredOutputs)
+	}
+}
+
+func TestGetNextStep_OneRequiredOutput(t *testing.T) {
+	client := startClient(t, newServerWithStore(t, registerAllThree))
+	runID := startRunAndGetID(t, client, loaderTestdataPath("requires_output.yaml"), "task")
+
+	first := getNextStepForTest(t, client, runID)
+	if first.StepID != "explore" {
+		t.Fatalf("expected first step explore, got %q", first.StepID)
+	}
+
+	exploreOutput := "STATUS: done\nExplore output"
+	result, _ := callCompleteStep(t, client, runID, "explore", exploreOutput)
+	if result.IsError {
+		t.Fatalf("complete_step returned error: %v", result.Content)
+	}
+
+	second := getNextStepForTest(t, client, runID)
+	if second.StepID != "implement" {
+		t.Fatalf("expected step implement, got %q", second.StepID)
+	}
+	if second.RequiredOutputs == nil {
+		t.Fatal("expected required_outputs map, got nil")
+	}
+	required, ok := second.RequiredOutputs["explore"]
+	if !ok {
+		t.Fatalf("expected required_outputs to contain explore, got %#v", second.RequiredOutputs)
+	}
+	if required == nil || *required != exploreOutput {
+		t.Fatalf("expected required output %q, got %#v", exploreOutput, required)
+	}
+}
+
+func TestGetNextStep_MultipleRequiredOutputs(t *testing.T) {
+	client := startClient(t, newServerWithStore(t, registerAllThree))
+	runID := startRunAndGetID(t, client, loaderTestdataPath("requires_output.yaml"), "task")
+
+	step := getNextStepForTest(t, client, runID)
+	if step.StepID != "explore" {
+		t.Fatalf("expected step explore, got %q", step.StepID)
+	}
+	exploreOutput := "STATUS: done\nExplore output"
+	result, _ := callCompleteStep(t, client, runID, "explore", exploreOutput)
+	if result.IsError {
+		t.Fatalf("complete_step explore returned error: %v", result.Content)
+	}
+
+	step = getNextStepForTest(t, client, runID)
+	if step.StepID != "implement" {
+		t.Fatalf("expected step implement, got %q", step.StepID)
+	}
+	implementOutput := "STATUS: done\nImplement output"
+	result, _ = callCompleteStep(t, client, runID, "implement", implementOutput)
+	if result.IsError {
+		t.Fatalf("complete_step implement returned error: %v", result.Content)
+	}
+
+	step = getNextStepForTest(t, client, runID)
+	if step.StepID != "verify" {
+		t.Fatalf("expected step verify, got %q", step.StepID)
+	}
+	if len(step.RequiredOutputs) != 2 {
+		t.Fatalf("expected 2 required outputs, got %#v", step.RequiredOutputs)
+	}
+	exploreRequired := step.RequiredOutputs["explore"]
+	if exploreRequired == nil || *exploreRequired != exploreOutput {
+		t.Fatalf("expected explore output %q, got %#v", exploreOutput, exploreRequired)
+	}
+	implementRequired := step.RequiredOutputs["implement"]
+	if implementRequired == nil || *implementRequired != implementOutput {
+		t.Fatalf("expected implement output %q, got %#v", implementOutput, implementRequired)
+	}
+}
+
+func TestGetNextStep_RequiredStepWithoutOutput(t *testing.T) {
+	dbPath := t.TempDir() + "/test.db"
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	s := newServerWith(func(srv *mcpgoserver.MCPServer) {
+		tools.RegisterStartRun(srv, st)
+		tools.RegisterGetNextStep(srv, st)
+	})
+	client := startClient(t, s)
+
+	runID := startRunAndGetID(t, client, loaderTestdataPath("requires_output.yaml"), "task")
+
+	// Simulate completed required step but with no output yet.
+	if err := st.UpdateStepStatus(context.Background(), runID, "explore", domain.StepStatusDone, 1, nil); err != nil {
+		t.Fatalf("update step status: %v", err)
+	}
+
+	resp := getNextStepForTest(t, client, runID)
+	if resp.StepID != "implement" {
+		t.Fatalf("expected step implement, got %q", resp.StepID)
+	}
+	required, ok := resp.RequiredOutputs["explore"]
+	if !ok {
+		t.Fatalf("expected required_outputs to contain explore, got %#v", resp.RequiredOutputs)
+	}
+	if required != nil {
+		t.Fatalf("expected nil output for explore, got %#v", required)
+	}
+}
+
+func getNextStepForTest(t *testing.T, client interface {
+	CallTool(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
+}, runID string) domain.GetNextStepResponse {
+	t.Helper()
+
+	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name:      "get_next_step",
+			Arguments: map[string]any{"run_id": runID},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call get_next_step: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("get_next_step returned error: %v", result.Content)
+	}
+
+	text := result.Content[0].(mcp.TextContent).Text
+	var resp domain.GetNextStepResponse
+	if err := json.Unmarshal([]byte(text), &resp); err != nil {
+		t.Fatalf("parse get_next_step response: %v", err)
+	}
+	return resp
+}

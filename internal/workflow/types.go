@@ -25,12 +25,13 @@ type AgentWorkspace struct {
 
 // Step is a single execution unit in a workflow.
 type Step struct {
-	ID      string            `yaml:"id" json:"id"`
-	Agent   string            `yaml:"agent" json:"agent"`
-	Input   string            `yaml:"input" json:"input"`
-	Expects string            `yaml:"expects,omitempty" json:"expects,omitempty"`
-	Extract map[string]string `yaml:"extract,omitempty" json:"extract,omitempty"`
-	OnFail  *OnFail           `yaml:"on_fail,omitempty" json:"on_fail,omitempty"`
+	ID             string            `yaml:"id" json:"id"`
+	Agent          string            `yaml:"agent" json:"agent"`
+	Input          string            `yaml:"input" json:"input"`
+	Expects        string            `yaml:"expects,omitempty" json:"expects,omitempty"`
+	Extract        map[string]string `yaml:"extract,omitempty" json:"extract,omitempty"`
+	RequiresOutput []string          `yaml:"requires_output,omitempty" json:"requires_output,omitempty"`
+	OnFail         *OnFail           `yaml:"on_fail,omitempty" json:"on_fail,omitempty"`
 }
 
 // OnFail describes retry and escalation behaviour when a step fails.
