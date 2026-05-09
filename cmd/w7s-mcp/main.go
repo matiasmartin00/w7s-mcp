@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,6 +14,13 @@ import (
 	"github.com/matiasmartin00/w7s-mcp/internal/mcpserver"
 )
 
+// Build-time variables set by GoReleaser via -ldflags.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	// Structured logger — writes to stderr so it doesn't pollute the transport output.
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -20,7 +28,12 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	slog.Info("starting w7s-mcp server", "transport", "streamable-http")
+	slog.Info("starting w7s-mcp server",
+		"version", version,
+		"commit", commit,
+		"built", date,
+		"transport", "streamable-http",
+	)
 
 	s := mcpserver.New()
 	httpSrv := buildServer(s)
@@ -68,6 +81,11 @@ func buildServer(s *mcpgoserver.MCPServer) *http.Server {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
+	})
+	// Version endpoint — returns build info as plain text.
+	mux.HandleFunc("/version", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintf(w, "w7s-mcp %s (%s) built %s\n", version, commit, date)
 	})
 
 	return &http.Server{
