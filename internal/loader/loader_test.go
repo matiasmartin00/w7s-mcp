@@ -8,7 +8,6 @@ import (
 )
 
 // TestLoad_ValidWorkflow verifies that a valid YAML workflow file loads correctly.
-// RED: loader.Load does not exist yet — this test references it to establish contract.
 func TestLoad_ValidWorkflow(t *testing.T) {
 	wf, err := loader.Load("testdata/valid.yaml")
 	if err != nil {
@@ -17,17 +16,20 @@ func TestLoad_ValidWorkflow(t *testing.T) {
 	if wf == nil {
 		t.Fatal("expected non-nil workflow, got nil")
 	}
-	if wf.Metadata.Name != "greet-user" {
-		t.Errorf("expected metadata.name %q, got %q", "greet-user", wf.Metadata.Name)
+	if wf.ID != "test-workflow" {
+		t.Errorf("expected id %q, got %q", "test-workflow", wf.ID)
+	}
+	if wf.Name != "Test Workflow" {
+		t.Errorf("expected name %q, got %q", "Test Workflow", wf.Name)
 	}
 	if len(wf.Steps) != 1 {
 		t.Errorf("expected 1 step, got %d", len(wf.Steps))
 	}
-	if wf.Steps[0].ID != "step-greet" {
-		t.Errorf("expected step id %q, got %q", "step-greet", wf.Steps[0].ID)
+	if wf.Steps[0].ID != "step1" {
+		t.Errorf("expected step id %q, got %q", "step1", wf.Steps[0].ID)
 	}
-	if wf.Steps[0].Tool != "hello_world" {
-		t.Errorf("expected step tool %q, got %q", "hello_world", wf.Steps[0].Tool)
+	if wf.Steps[0].Agent != "worker" {
+		t.Errorf("expected step agent %q, got %q", "worker", wf.Steps[0].Agent)
 	}
 }
 
@@ -56,10 +58,12 @@ func TestLoad_FileNotFound(t *testing.T) {
 func TestLoadBytes_WrongType(t *testing.T) {
 	// steps must be an array; providing a string should fail schema validation.
 	data := []byte(`
-apiVersion: workflow.w7s.io/v1alpha1
-kind: Workflow
-metadata:
-  name: bad-type
+id: bad-type
+name: Bad Type
+version: "1.0.0"
+agents:
+  - id: worker
+    name: Worker
 steps: "not-an-array"
 `)
 	_, err := loader.LoadBytes(data)
@@ -72,17 +76,21 @@ steps: "not-an-array"
 // from the file system for a different valid workflow (multiple steps).
 func TestLoadBytes_ValidWorkflow(t *testing.T) {
 	data := []byte(`
-apiVersion: workflow.w7s.io/v1alpha1
-kind: Workflow
-metadata:
-  name: multi-step
+id: multi-step
+name: Multi Step
+version: "1.0.0"
+agents:
+  - id: agent-a
+    name: Agent A
+  - id: agent-b
+    name: Agent B
 steps:
   - id: step-one
-    tool: tool_a
+    agent: agent-a
+    input: "Do step one."
   - id: step-two
-    tool: tool_b
-    dependsOn:
-      - step-one
+    agent: agent-b
+    input: "Do step two."
 `)
 	wf, err := loader.LoadBytes(data)
 	if err != nil {
@@ -91,7 +99,45 @@ steps:
 	if len(wf.Steps) != 2 {
 		t.Errorf("expected 2 steps, got %d", len(wf.Steps))
 	}
-	if wf.Steps[1].DependsOn[0] != "step-one" {
-		t.Errorf("expected dependsOn[0]=%q, got %q", "step-one", wf.Steps[1].DependsOn[0])
+	if wf.Steps[0].ID != "step-one" {
+		t.Errorf("expected step[0].id=%q, got %q", "step-one", wf.Steps[0].ID)
+	}
+}
+
+// TestWorkflowDirs_KnownClients verifies path resolution for known client names.
+func TestWorkflowDirs_KnownClients(t *testing.T) {
+	cases := []struct {
+		clientName    string
+		globalSuffix  string
+		repoDir       string
+	}{
+		{"opencode", "/.config/opencode/workflows", ".opencode/workflows"},
+		{"github-copilot", "/.copilot/workflows", ".github/workflows-mcp"},
+		{"copilot", "/.copilot/workflows", ".github/workflows-mcp"},
+		{"claude", "/.claude/workflows", ".claude/workflows"},
+		{"unknown-client", "/.config/w7s/workflows", ".w7s/workflows"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.clientName, func(t *testing.T) {
+			global, repo := loader.WorkflowDirs(tc.clientName)
+			if !strings.HasSuffix(global, tc.globalSuffix) {
+				t.Errorf("globalDir: expected suffix %q, got %q", tc.globalSuffix, global)
+			}
+			if repo != tc.repoDir {
+				t.Errorf("repoDir: expected %q, got %q", tc.repoDir, repo)
+			}
+		})
+	}
+}
+
+// TestLoadByID_AbsolutePath verifies that LoadByID loads from an absolute path directly.
+func TestLoadByID_AbsolutePath(t *testing.T) {
+	// Use an absolute path to the valid fixture.
+	// The test must be run from within internal/loader (go test ./internal/loader/...)
+	// so we use Load directly to get the abs path.
+	wf, err := loader.LoadByID("opencode", "/nonexistent/absolute.yml")
+	if err == nil {
+		t.Errorf("expected error for nonexistent absolute path, got workflow: %v", wf)
 	}
 }

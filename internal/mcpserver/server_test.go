@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -218,7 +220,6 @@ func TestNew_HelloWorldTool_Call(t *testing.T) {
 }
 
 // TestNew_StartRunTool_Listed verifies that start_run tool is present in tools/list.
-// RED: start_run is not yet registered — this test will fail until server.go is updated.
 func TestNew_StartRunTool_Listed(t *testing.T) {
 	s := mcpserver.New()
 	client, err := mcpgoclient.NewInProcessClient(s)
@@ -255,6 +256,13 @@ func TestNew_StartRunTool_Listed(t *testing.T) {
 	}
 }
 
+// validFixturePath returns the absolute path to the valid test fixture.
+func validFixturePath() string {
+	_, filename, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(filename)
+	return filepath.Join(dir, "..", "loader", "testdata", "valid.yaml")
+}
+
 // TestNew_StartRunTool_Call_ValidWorkflow verifies start_run tool returns success for a valid workflow file.
 func TestNew_StartRunTool_Call_ValidWorkflow(t *testing.T) {
 	s := mcpserver.New()
@@ -275,7 +283,8 @@ func TestNew_StartRunTool_Call_ValidWorkflow(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "start_run",
 			Arguments: map[string]any{
-				"workflow_path": "../../internal/loader/testdata/valid.yaml",
+				"workflow_id": validFixturePath(),
+				"task":        "Implement the feature",
 			},
 		},
 	})
@@ -288,15 +297,19 @@ func TestNew_StartRunTool_Call_ValidWorkflow(t *testing.T) {
 	if len(result.Content) == 0 {
 		t.Errorf("expected non-empty content in tool result")
 	}
-	// Verify the response mentions the workflow name.
+	// Verify the response JSON contains the workflow name.
 	text := result.Content[0].(mcp.TextContent).Text
-	if !strings.Contains(text, "greet-user") {
-		t.Errorf("expected response to mention workflow name 'greet-user', got: %s", text)
+	if !strings.Contains(text, "Test Workflow") {
+		t.Errorf("expected response to mention workflow name 'Test Workflow', got: %s", text)
+	}
+	// Verify the response contains run_id.
+	if !strings.Contains(text, "run_id") {
+		t.Errorf("expected response to contain 'run_id', got: %s", text)
 	}
 }
 
-// TestNew_StartRunTool_Call_InvalidPath verifies start_run returns an error result for missing file.
-func TestNew_StartRunTool_Call_InvalidPath(t *testing.T) {
+// TestNew_StartRunTool_Call_InvalidWorkflowID verifies start_run returns an error for missing workflow.
+func TestNew_StartRunTool_Call_InvalidWorkflowID(t *testing.T) {
 	s := mcpserver.New()
 	client, err := mcpgoclient.NewInProcessClient(s)
 	if err != nil {
@@ -315,7 +328,8 @@ func TestNew_StartRunTool_Call_InvalidPath(t *testing.T) {
 		Params: mcp.CallToolParams{
 			Name: "start_run",
 			Arguments: map[string]any{
-				"workflow_path": "/nonexistent/path/workflow.yaml",
+				"workflow_id": "/nonexistent/path/workflow.yaml",
+				"task":        "some task",
 			},
 		},
 	})
@@ -323,7 +337,7 @@ func TestNew_StartRunTool_Call_InvalidPath(t *testing.T) {
 		t.Fatalf("call start_run: %v", err)
 	}
 	if !result.IsError {
-		t.Errorf("expected error result for missing file, got success: %v", result.Content)
+		t.Errorf("expected error result for missing workflow, got success: %v", result.Content)
 	}
 }
 

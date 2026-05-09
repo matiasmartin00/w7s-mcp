@@ -17,6 +17,37 @@ import (
 //go:embed workflow.schema.json
 var schemaBytes []byte
 
+// LoadByID resolves and loads a workflow by its ID or absolute path,
+// searching directories determined by the MCP clientName.
+func LoadByID(clientName, workflowID string) (*workflow.Workflow, error) {
+	globalDir, repoDir := WorkflowDirs(clientName)
+
+	// 1. Absolute path: if workflowID looks like an absolute path, try directly.
+	if len(workflowID) > 0 && workflowID[0] == '/' {
+		if _, err := os.Stat(workflowID); err == nil {
+			return Load(workflowID)
+		}
+		return nil, fmt.Errorf("workflow file not found at absolute path %q; ensure the file exists", workflowID)
+	}
+
+	// 2. Global dir: {globalDir}/{workflowID}.yml
+	globalPath := globalDir + "/" + workflowID + ".yml"
+	if _, err := os.Stat(globalPath); err == nil {
+		return Load(globalPath)
+	}
+
+	// 3. Repo dir: {repoDir}/{workflowID}.yml (relative to cwd)
+	repoPath := repoDir + "/" + workflowID + ".yml"
+	if _, err := os.Stat(repoPath); err == nil {
+		return Load(repoPath)
+	}
+
+	return nil, fmt.Errorf(
+		"workflow %q not found; searched %q and %q — create a file named %s.yml in one of those directories",
+		workflowID, globalDir, repoDir, workflowID,
+	)
+}
+
 // Load reads a YAML workflow file from path, validates it against the JSON Schema,
 // and returns a typed *workflow.Workflow. It wraps any underlying error with context.
 func Load(path string) (*workflow.Workflow, error) {

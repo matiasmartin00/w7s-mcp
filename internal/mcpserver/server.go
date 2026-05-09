@@ -5,8 +5,12 @@ package mcpserver
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -17,6 +21,27 @@ import (
 
 // startTime is captured at package init for uptime reporting.
 var startTime = time.Now()
+
+// clientName holds the MCP client name captured during initialization.
+// Protected by clientNameMu for concurrent access.
+var (
+	clientName   string
+	clientNameMu sync.RWMutex
+)
+
+// getClientName returns the stored client name (safe for concurrent reads).
+func getClientName() string {
+	clientNameMu.RLock()
+	defer clientNameMu.RUnlock()
+	return clientName
+}
+
+// setClientName stores the client name captured at initialize time.
+func setClientName(name string) {
+	clientNameMu.Lock()
+	defer clientNameMu.Unlock()
+	clientName = name
+}
 
 // New builds and returns a fully configured MCP server.
 // All tool/resource/prompt registrations happen here; transport is not concerned.
@@ -53,8 +78,10 @@ func buildHooks() *server.Hooks {
 		slog.Error("mcp request error", "method", method, "id", id, "error", err)
 	})
 	hooks.AddAfterInitialize(func(_ context.Context, _ any, msg *mcp.InitializeRequest, _ *mcp.InitializeResult) {
+		name := msg.Params.ClientInfo.Name
+		setClientName(name)
 		slog.Info("client initialized",
-			"client_name", msg.Params.ClientInfo.Name,
+			"client_name", name,
 			"client_version", msg.Params.ClientInfo.Version,
 			"protocol_version", msg.Params.ProtocolVersion,
 		)
@@ -106,27 +133,53 @@ func registerTools(s *server.MCPServer) {
 		slog.Info("server_info called", "info", info)
 		return mcp.NewToolResultText(info), nil
 	})
+
 	// ── Tool: start_run ──────────────────────────────────────────────────────
 	startRunTool := mcp.NewTool("start_run",
-		mcp.WithDescription("Load and validate a workflow file, then start a run"),
-		mcp.WithString("workflow_path",
+		mcp.WithDescription("Load and validate a workflow, then start a run"),
+		mcp.WithString("workflow_id",
 			mcp.Required(),
-			mcp.Description("Path to the YAML workflow file"),
+			mcp.Description("ID or absolute path of the YAML workflow file"),
+		),
+		mcp.WithString("task",
+			mcp.Required(),
+			mcp.Description("Task description to pass to the workflow"),
 		),
 	)
 
-	s.AddTool(startRunTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		path, err := req.RequireString("workflow_path")
+	s.AddTool(startRunTool, func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		workflowID, err := req.RequireString("workflow_id")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		wf, err := loader.Load(path)
+		task, err := req.RequireString("task")
 		if err != nil {
-			slog.Error("start_run failed to load workflow", "path", path, "error", err)
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		cn := getClientName()
+		wf, err := loader.LoadByID(cn, workflowID)
+		if err != nil {
+			slog.Error("start_run failed to load workflow", "workflow_id", workflowID, "error", err)
 			return mcp.NewToolResultError(fmt.Sprintf("failed to load workflow: %s", err)), nil
 		}
-		slog.Info("start_run loaded workflow", "name", wf.Metadata.Name, "steps", len(wf.Steps))
-		return mcp.NewToolResultText(fmt.Sprintf("Workflow '%s' loaded successfully with %d steps", wf.Metadata.Name, len(wf.Steps))), nil
+
+		stepIDs := make([]string, len(wf.Steps))
+		for i, step := range wf.Steps {
+			stepIDs[i] = step.ID
+		}
+
+		runID := newRunID()
+		slog.Info("start_run loaded workflow", "workflow", wf.Name, "steps", stepIDs, "task", task, "run_id", runID)
+
+		out := map[string]any{
+			"run_id":   runID,
+			"workflow": wf.Name,
+			"steps":    stepIDs,
+			"message":  fmt.Sprintf("Run started. Call get_next_step with run_id: %s", runID),
+		}
+		outBytes, _ := json.Marshal(out)
+		return mcp.NewToolResultText(string(outBytes)), nil
 	})
 }
 
@@ -154,6 +207,13 @@ Prompts  : greet
 			},
 		}, nil
 	})
+}
+
+// newRunID generates a random hex run identifier.
+func newRunID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // registerPrompts adds all MCP prompts to s.
