@@ -11,7 +11,7 @@ A minimal [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) serve
 ### Run locally
 
 ```bash
-go run .
+go run ./cmd/w7s-mcp
 ```
 
 The server listens on `http://localhost:4004/mcp` by default.
@@ -19,7 +19,7 @@ The server listens on `http://localhost:4004/mcp` by default.
 ### Change the port
 
 ```bash
-PORT=8080 go run .
+PORT=8080 go run ./cmd/w7s-mcp
 ```
 
 ### Health check
@@ -66,7 +66,7 @@ curl -s -X POST http://localhost:4004/mcp \
 go test ./...
 
 # Build
-go build .
+go build ./cmd/w7s-mcp
 
 # Vet
 go vet ./...
@@ -75,8 +75,8 @@ go vet ./...
 ## Architecture
 
 ```
-main.go                         — HTTP bootstrap, graceful shutdown
+cmd/w7s-mcp/main.go             — HTTP bootstrap, graceful shutdown
 internal/mcpserver/server.go    — MCP server construction (transport-agnostic)
 ```
 
-Business logic lives in `internal/mcpserver`; the transport layer (`main.go`) only wires HTTP.
+Business logic lives in `internal/mcpserver`; the transport layer (`cmd/w7s-mcp/main.go`) only wires HTTP.

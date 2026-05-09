@@ -1,5 +1,5 @@
 # Binary compiled locally
-w7s-mcp
+/w7s-mcp
 
 # Go build cache artifacts
 *.test
