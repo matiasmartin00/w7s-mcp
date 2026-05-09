@@ -1,0 +1,22 @@
+id: multi-step-workflow
+name: Multi Step Workflow
+version: "1.0.0"
+agents:
+  - id: explorer
+    name: Explorer
+    workspace:
+      files:
+        AGENTS.md: agents/explorer.md
+  - id: implementor
+    name: Implementor
+steps:
+  - id: explore
+    agent: explorer
+    input: "Task: {{task}}\n\nExplore the codebase."
+    expects: "STATUS:\\s*done"
+    extract:
+      scope: "SCOPE:\\s*(.+)"
+  - id: implement
+    agent: implementor
+    input: "Task: {{task}}\nScope: {{scope}}\n\nImplement it."
+    expects: "STATUS:\\s*done"
