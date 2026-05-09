@@ -2,10 +2,7 @@
 // for w7s-mcp workflow executions.
 package domain
 
-import (
-	"crypto/rand"
-	"fmt"
-)
+import "github.com/google/uuid"
 
 // RunStatus represents the lifecycle state of a workflow run.
 type RunStatus string
@@ -54,20 +51,7 @@ type Variable struct {
 	Value string `json:"value"`
 }
 
-// NewRunID generates a new UUID v4 string using crypto/rand.
-// Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+// NewRunID generates a new UUID v4 string.
 func NewRunID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	// Set version 4
-	b[6] = (b[6] & 0x0f) | 0x40
-	// Set variant bits
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4],
-		b[4:6],
-		b[6:8],
-		b[8:10],
-		b[10:16],
-	)
+	return uuid.New().String()
 }
