@@ -1,6 +1,7 @@
 package loader_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -139,5 +140,82 @@ func TestLoadByID_AbsolutePath(t *testing.T) {
 	wf, err := loader.LoadByID("opencode", "/nonexistent/absolute.yml")
 	if err == nil {
 		t.Errorf("expected error for nonexistent absolute path, got workflow: %v", wf)
+	}
+}
+
+// minimalWorkflowYAML is a valid minimal workflow YAML for use in dir-based tests.
+const minimalWorkflowYAML = `id: my-workflow
+name: My Workflow
+version: "1.0.0"
+agents:
+  - id: worker
+    name: Worker
+steps:
+  - id: step1
+    agent: worker
+    input: "Do something."
+`
+
+// TestLoadByIDFromDirs_GlobalPrecedenceOverRepo verifies that when the same workflow ID
+// exists in both the global dir and the repo dir, the global one is returned.
+func TestLoadByIDFromDirs_GlobalPrecedenceOverRepo(t *testing.T) {
+	globalDir := t.TempDir()
+	repoDir := t.TempDir()
+
+	// Write DIFFERENT content to each dir so we can distinguish which was loaded.
+	globalYAML := strings.ReplaceAll(minimalWorkflowYAML, "My Workflow", "Global Workflow")
+	repoYAML := strings.ReplaceAll(minimalWorkflowYAML, "My Workflow", "Repo Workflow")
+
+	if err := os.WriteFile(globalDir+"/my-workflow.yml", []byte(globalYAML), 0o644); err != nil {
+		t.Fatalf("writing global workflow: %v", err)
+	}
+	if err := os.WriteFile(repoDir+"/my-workflow.yml", []byte(repoYAML), 0o644); err != nil {
+		t.Fatalf("writing repo workflow: %v", err)
+	}
+
+	wf, err := loader.LoadByIDFromDirs(globalDir, repoDir, "my-workflow")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if wf.Name != "Global Workflow" {
+		t.Errorf("expected global workflow to take precedence, got name %q", wf.Name)
+	}
+}
+
+// TestLoadByIDFromDirs_FallsBackToRepo verifies that when the workflow only exists in the
+// repo dir (not in global), it is loaded from the repo dir.
+func TestLoadByIDFromDirs_FallsBackToRepo(t *testing.T) {
+	globalDir := t.TempDir()
+	repoDir := t.TempDir()
+
+	repoYAML := strings.ReplaceAll(minimalWorkflowYAML, "My Workflow", "Repo Workflow")
+	if err := os.WriteFile(repoDir+"/my-workflow.yml", []byte(repoYAML), 0o644); err != nil {
+		t.Fatalf("writing repo workflow: %v", err)
+	}
+
+	wf, err := loader.LoadByIDFromDirs(globalDir, repoDir, "my-workflow")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if wf.Name != "Repo Workflow" {
+		t.Errorf("expected repo workflow, got name %q", wf.Name)
+	}
+}
+
+// TestLoadByIDFromDirs_ErrorIncludesBothPaths verifies that when a workflow is not found,
+// the error message mentions both the global and repo directories.
+func TestLoadByIDFromDirs_ErrorIncludesBothPaths(t *testing.T) {
+	globalDir := t.TempDir()
+	repoDir := t.TempDir()
+
+	_, err := loader.LoadByIDFromDirs(globalDir, repoDir, "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for missing workflow, got nil")
+	}
+	if !strings.Contains(err.Error(), globalDir) {
+		t.Errorf("expected error to mention globalDir %q, got: %v", globalDir, err)
+	}
+	if !strings.Contains(err.Error(), repoDir) {
+		t.Errorf("expected error to mention repoDir %q, got: %v", repoDir, err)
 	}
 }
