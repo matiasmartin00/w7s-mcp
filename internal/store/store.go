@@ -120,6 +120,67 @@ func (s *Store) GetRun(ctx context.Context, runID string) (domain.Run, error) {
 	return run, nil
 }
 
+// GetStep returns the Step for the given run_id + step_id. Returns domain.ErrNotFound if absent.
+func (s *Store) GetStep(ctx context.Context, runID, stepID string) (domain.Step, error) {
+	const q = `SELECT id, run_id, step_id, status, attempt, output, created_at FROM steps WHERE run_id = ? AND step_id = ?`
+	row := s.db.QueryRowContext(ctx, q, runID, stepID)
+
+	var step domain.Step
+	var status string
+	err := row.Scan(&step.ID, &step.RunID, &step.StepID, &status, &step.Attempt, &step.Output, &step.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Step{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.Step{}, fmt.Errorf("get step: %w", err)
+	}
+	step.Status = domain.StepStatus(status)
+	return step, nil
+}
+
+// UpdateRunStatus updates the status of the run with the given ID.
+func (s *Store) UpdateRunStatus(ctx context.Context, runID string, status domain.RunStatus) error {
+	const q = `UPDATE runs SET status = ? WHERE id = ?`
+	_, err := s.db.ExecContext(ctx, q, string(status), runID)
+	if err != nil {
+		return fmt.Errorf("update run status: %w", err)
+	}
+	return nil
+}
+
+// UpdateStepStatus updates the status, attempt count, and output of a step.
+func (s *Store) UpdateStepStatus(ctx context.Context, runID, stepID string, status domain.StepStatus, attempt int, output *string) error {
+	const q = `UPDATE steps SET status = ?, attempt = ?, output = ? WHERE run_id = ? AND step_id = ?`
+	_, err := s.db.ExecContext(ctx, q, string(status), attempt, output, runID, stepID)
+	if err != nil {
+		return fmt.Errorf("update step status: %w", err)
+	}
+	return nil
+}
+
+// ResetStepsToPending resets the step at fromStepID and all steps that come after it
+// in stepOrder to pending status, clearing output and resetting attempt to 0.
+func (s *Store) ResetStepsToPending(ctx context.Context, runID string, fromStepID string, stepOrder []string) error {
+	startIdx := -1
+	for i, id := range stepOrder {
+		if id == fromStepID {
+			startIdx = i
+			break
+		}
+	}
+	if startIdx == -1 {
+		return fmt.Errorf("reset steps to pending: step %q not found in stepOrder", fromStepID)
+	}
+
+	const q = `UPDATE steps SET status = ?, attempt = 0, output = NULL WHERE run_id = ? AND step_id = ?`
+	for _, id := range stepOrder[startIdx:] {
+		if _, err := s.db.ExecContext(ctx, q, string(domain.StepStatusPending), runID, id); err != nil {
+			return fmt.Errorf("reset step %q to pending: %w", id, err)
+		}
+	}
+	return nil
+}
+
 // GetStepsByRun returns all steps for a run, in insertion order.
 func (s *Store) GetStepsByRun(ctx context.Context, runID string) ([]domain.Step, error) {
 	const q = `SELECT id, run_id, step_id, status, attempt, output, created_at FROM steps WHERE run_id = ? ORDER BY rowid`
