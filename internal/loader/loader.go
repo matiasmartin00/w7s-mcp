@@ -21,7 +21,18 @@ var schemaBytes []byte
 // searching directories determined by the MCP clientName.
 func LoadByID(clientName, workflowID string) (*workflow.Workflow, error) {
 	globalDir, repoDir := WorkflowDirs(clientName)
+	return LoadByIDFromDirs(globalDir, repoDir, workflowID)
+}
 
+// LoadByIDFromDirs resolves and loads a workflow by ID using explicit directory paths.
+// This variant is intended for testing, allowing callers to inject temp dirs without
+// touching real home-directory paths.
+//
+// Resolution order:
+//  1. Absolute path — if workflowID starts with '/', use it directly.
+//  2. Global dir   — {globalDir}/{workflowID}.yml  (takes precedence over repo dir).
+//  3. Repo dir     — {repoDir}/{workflowID}.yml
+func LoadByIDFromDirs(globalDir, repoDir, workflowID string) (*workflow.Workflow, error) {
 	// 1. Absolute path: if workflowID looks like an absolute path, try directly.
 	if len(workflowID) > 0 && workflowID[0] == '/' {
 		if _, err := os.Stat(workflowID); err == nil {
