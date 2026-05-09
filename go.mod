@@ -3,6 +3,7 @@ module github.com/matiasmartin00/w7s-mcp
 go 1.25.5
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v0.52.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	gopkg.in/yaml.v3 v3.0.1
@@ -12,7 +13,6 @@ require (
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
