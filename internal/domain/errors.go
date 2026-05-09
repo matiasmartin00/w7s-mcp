@@ -1,6 +1,12 @@
 package domain
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrNotFound is returned when a requested entity does not exist in the store.
+var ErrNotFound = errors.New("not found")
 
 // Error code constants used in ValidationError.
 const (

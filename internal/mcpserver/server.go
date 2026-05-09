@@ -6,10 +6,13 @@ package mcpserver
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/matiasmartin00/w7s-mcp/internal/store"
 	"github.com/matiasmartin00/w7s-mcp/internal/tools"
 )
 
@@ -25,9 +28,24 @@ func New() *server.MCPServer {
 		server.WithRecovery(),
 	)
 
+	dbDir := os.Getenv("W7S_DB_DIR")
+	if dbDir == "" {
+		home, _ := os.UserHomeDir()
+		dbDir = filepath.Join(home, ".config", "w7s")
+	}
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		slog.Error("failed to create db directory", "path", dbDir, "error", err)
+	}
+	st, err := store.Open(filepath.Join(dbDir, "data.db"))
+	if err != nil {
+		slog.Error("failed to open store", "error", err)
+		panic(err)
+	}
+
 	tools.RegisterHelloWorld(s)
 	tools.RegisterServerInfo(s)
-	tools.RegisterStartRun(s)
+	tools.RegisterStartRun(s, st)
+	tools.RegisterGetRunStatus(s, st)
 
 	registerResources(s)
 	registerPrompts(s)

@@ -2,16 +2,36 @@ package tools_test
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	mcpgoserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/matiasmartin00/w7s-mcp/internal/store"
 	"github.com/matiasmartin00/w7s-mcp/internal/tools"
 )
 
+// newServerWithStore creates a minimal MCPServer with an ephemeral SQLite store
+// and one or more tool registration functions applied.
+func newServerWithStore(t *testing.T, registers ...func(*mcpgoserver.MCPServer, *store.Store)) *mcpgoserver.MCPServer {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+	s := mcpgoserver.NewMCPServer("test", "0.0.0", mcpgoserver.WithToolCapabilities(true))
+	for _, reg := range registers {
+		reg(s, st)
+	}
+	return s
+}
+
 func TestStartRun_ValidWorkflow(t *testing.T) {
-	client := startClient(t, newServerWith(tools.RegisterStartRun))
+	client := startClient(t, newServerWithStore(t, tools.RegisterStartRun))
 
 	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
@@ -41,7 +61,7 @@ func TestStartRun_ValidWorkflow(t *testing.T) {
 }
 
 func TestStartRun_InvalidWorkflowID(t *testing.T) {
-	client := startClient(t, newServerWith(tools.RegisterStartRun))
+	client := startClient(t, newServerWithStore(t, tools.RegisterStartRun))
 
 	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
@@ -61,7 +81,7 @@ func TestStartRun_InvalidWorkflowID(t *testing.T) {
 }
 
 func TestStartRun_MissingArguments(t *testing.T) {
-	client := startClient(t, newServerWith(tools.RegisterStartRun))
+	client := startClient(t, newServerWithStore(t, tools.RegisterStartRun))
 
 	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
