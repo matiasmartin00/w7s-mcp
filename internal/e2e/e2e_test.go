@@ -295,6 +295,13 @@ func TestE2E_EscalationPath(t *testing.T) {
 	// Complete implement
 	getNextStep(t, e.client, runID)
 	completeStep(t, e.client, runID, "implement", "STATUS: done\nimplemented auth")
+	if err := e.st.SetVariable(context.Background(), domain.Variable{
+		RunID: runID,
+		Key:   "feedback",
+		Value: "seed feedback for first verify attempt",
+	}); err != nil {
+		t.Fatalf("seed feedback variable: %v", err)
+	}
 
 	// Call get_next_step 3 times on verify to accumulate attempts to 3
 	// Each call increments the attempt counter on the running step.
