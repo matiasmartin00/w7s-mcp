@@ -151,6 +151,35 @@ func TestGetNextStep_PromptInterpolation(t *testing.T) {
 	if !strings.Contains(resp.Prompt, "build feature X") {
 		t.Errorf("expected interpolated task in prompt, got: %s", resp.Prompt)
 	}
+	if !strings.Contains(resp.Prompt, runID) {
+		t.Errorf("expected interpolated run_id in prompt, got: %s", resp.Prompt)
+	}
+}
+
+func TestGetNextStep_MissingInterpolationVariableReturnsError(t *testing.T) {
+	client := startClient(t, newServerWithStore(t, registerBoth))
+	runID := startRunAndGetID(t, client, loaderTestdataPath("interpolation_missing_var.yaml"), "build feature X")
+
+	result, err := client.CallTool(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name:      "get_next_step",
+			Arguments: map[string]any{"run_id": runID},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected error, got success: %v", result.Content)
+	}
+
+	text := result.Content[0].(mcp.TextContent).Text
+	if !strings.Contains(text, "failed to interpolate step input") {
+		t.Fatalf("expected interpolation error message, got: %s", text)
+	}
+	if !strings.Contains(text, `missing variable "unknown_var"`) {
+		t.Fatalf("expected missing variable name in error message, got: %s", text)
+	}
 }
 
 func TestGetNextStep_WorkflowDoneWhenNoStepsRemain(t *testing.T) {

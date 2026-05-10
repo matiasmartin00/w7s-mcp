@@ -65,7 +65,10 @@ These variables are automatically available in all step prompts:
 
 | Variable    | Description                             |
 |-------------|-----------------------------------------|
+| `{{run_id}}` | The ID generated for the current run     |
 | `{{task}}`  | The original task passed to `start_run` |
+
+Missing variables fail fast in `get_next_step` with an explicit error (for example, `missing variable "scope"`).
 
 ---
 

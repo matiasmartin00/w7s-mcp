@@ -67,6 +67,37 @@ func TestInterpolate_EmptyTemplate(t *testing.T) {
 	}
 }
 
+func TestInterpolateStrict_ReplacesKnownVariables(t *testing.T) {
+	t.Parallel()
+	tmpl := "Task: {{task}}\nRun: {{run_id}}"
+	vars := map[string]string{"task": "implement X", "run_id": "run-123"}
+	got, err := parser.InterpolateStrict(tmpl, vars)
+	if err != nil {
+		t.Fatalf("InterpolateStrict() unexpected error: %v", err)
+	}
+	want := "Task: implement X\nRun: run-123"
+	if got != want {
+		t.Errorf("InterpolateStrict() = %q, want %q", got, want)
+	}
+}
+
+func TestInterpolateStrict_ReturnsErrorOnMissingVariable(t *testing.T) {
+	t.Parallel()
+	tmpl := "Task: {{task}}\nScope: {{scope}}"
+	vars := map[string]string{"task": "implement X"}
+	_, err := parser.InterpolateStrict(tmpl, vars)
+	if err == nil {
+		t.Fatal("InterpolateStrict() expected error, got nil")
+	}
+	missingErr, ok := err.(parser.ErrMissingVariable)
+	if !ok {
+		t.Fatalf("InterpolateStrict() error type = %T, want parser.ErrMissingVariable", err)
+	}
+	if missingErr.Variable != "scope" {
+		t.Fatalf("missing variable = %q, want %q", missingErr.Variable, "scope")
+	}
+}
+
 // ── Extract ──────────────────────────────────────────────────────────────────
 
 func TestExtract_CapturesMatchingVariables(t *testing.T) {
