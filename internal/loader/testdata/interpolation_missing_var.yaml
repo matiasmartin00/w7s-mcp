@@ -1,0 +1,11 @@
+id: interpolation-missing-var
+name: Interpolation Missing Variable
+version: "1.0.0"
+agents:
+  - id: worker
+    name: Worker
+steps:
+  - id: step1
+    agent: worker
+    input: "Task: {{task}}\nUnknown: {{unknown_var}}"
+    expects: "STATUS:\\s*done"

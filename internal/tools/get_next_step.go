@@ -120,8 +120,14 @@ func getNextStepHandler(ctx context.Context, req mcp.CallToolRequest, st *store.
 		slog.Error("get_next_step failed to get variables", "run_id", runID, "error", err)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to get variables: %s", err)), nil
 	}
+	// Built-in variables available in all step prompts.
+	vars["run_id"] = run.ID
+	vars["task"] = run.Task
 
-	prompt := parser.Interpolate(wfStep.Input, vars)
+	prompt, err := parser.InterpolateStrict(wfStep.Input, vars)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to interpolate step input: %s", err)), nil
+	}
 
 	requiredOutputs, err := collectRequiredOutputs(ctx, st, runID, wf, wfStep)
 	if err != nil {

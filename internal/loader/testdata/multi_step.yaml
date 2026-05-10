@@ -12,7 +12,7 @@ agents:
 steps:
   - id: explore
     agent: explorer
-    input: "Task: {{task}}\n\nExplore the codebase."
+    input: "Run: {{run_id}}\nTask: {{task}}\n\nExplore the codebase."
     expects: "STATUS:\\s*done"
     extract:
       scope: "SCOPE:\\s*(.+)"
