@@ -29,8 +29,8 @@ w7s-mcp solves this by:
 
 ## Quick links
 
-- [Getting Started](getting-started.md)
-- [Architecture](architecture.md)
-- [Tool Reference](tool-reference.md)
-- [Workflow Authoring](workflow-authoring.md)
-- [Contributing to Docs](contributing.md)
+- [Getting Started]({{ "/getting-started.html" | relative_url }})
+- [Architecture]({{ "/architecture.html" | relative_url }})
+- [Tool Reference]({{ "/tool-reference.html" | relative_url }})
+- [Workflow Authoring]({{ "/workflow-authoring.html" | relative_url }})
+- [Contributing to Docs]({{ "/contributing.html" | relative_url }})
